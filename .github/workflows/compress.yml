@@ -1,0 +1,32 @@
+name: Compress WebP Images
+
+on:
+  workflow_dispatch:
+
+jobs:
+  compress:
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install WebP tools
+      run: |
+        sudo apt update
+        sudo apt install -y webp
+
+    - name: Run compressor
+      run: |
+        python compress_webp_cwebp.py
+
+    - name: Commit changes
+      run: |
+        git config --global user.name "github-actions"
+        git config --global user.email "github-actions@github.com"
+
+        git add .
+        git commit -m "Compress WebP images" || echo "No changes"
+
+        git push
