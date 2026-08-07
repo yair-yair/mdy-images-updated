@@ -1,0 +1,35 @@
+name: Compress WebP Images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  compress:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: הורדת המאגר
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+
+    - name: התקנת כלי WebP
+      run: |
+        sudo apt update
+        sudo apt install -y webp
+
+    - name: הרצת דחיסה
+      run: |
+        python compress_webp_cwebp.py
+
+    - name: שמירת השינויים
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add .
+        git commit -m "Compressed WebP images" || echo "No changes"
+        git push
