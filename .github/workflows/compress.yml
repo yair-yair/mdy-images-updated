@@ -1,0 +1,53 @@
+name: Compress WebP Images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  compress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+    - name: הורדת המאגר
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+
+    - name: התקנת כלי WebP
+      run: |
+        sudo apt update
+        sudo apt install -y webp
+
+    - name: הרצת דחיסה בקבוצות עם שמירה שוטפת
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        # מריצים בקבוצות של 150 קבצים, ושומרים (commit + push) אחרי כל קבוצה.
+        # כך אם הריצה נעצרת/נכשלת באמצע - כל מה שכבר עובד ונשמר לא הולך לאיבוד,
+        # ואפשר פשוט להריץ את ה-workflow שוב כדי להמשיך מאיפה שהפסיקה.
+        BATCH_SIZE=150
+
+        while true; do
+          OUTPUT=$(python compress_webp_cwebp.py . "$BATCH_SIZE")
+          echo "$OUTPUT"
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "אין שינויים חדשים לשמור בסבב הזה."
+          else
+            git commit -m "דחיסת WebP - סבב אוטומטי ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+            git push
+          fi
+
+          if echo "$OUTPUT" | grep -q "נשארו 0 קבצים"; then
+            echo "כל התמונות עובדו בהצלחה."
+            break
+          fi
+        done

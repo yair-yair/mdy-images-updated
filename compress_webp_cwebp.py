@@ -90,17 +90,40 @@ def compress_image(file):
             str(temp_file)
         ]
 
-        result = subprocess.run(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
+        # ננסה עד פעמיים - לפעמים cwebp "מצליח" (קוד יציאה 0) אבל לא כותב
+        # בפועל את קובץ הפלט (למשל בעיית דיסק זמנית). ניסיון חוזר פותר את זה.
+        result = None
+        for attempt in range(1, 3):
+            result = subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+
+            if result.returncode != 0:
+                break
+
+            if temp_file.exists():
+                break
+
+            if attempt < 2:
+                time.sleep(0.5)
 
         if result.returncode != 0:
             failed_files += 1
             print("שגיאה:", file, flush=True)
             print(result.stderr.decode(errors="replace"), flush=True)
             log_error(file, result.stderr.decode(errors="replace"))
+            return
+
+        if not temp_file.exists():
+            failed_files += 1
+            print("שגיאה:", file, "cwebp דיווח הצלחה אך קובץ הפלט לא נוצר", flush=True)
+            log_error(
+                file,
+                "cwebp reported success (exit code 0) but the output file "
+                "was not created, even after a retry",
+            )
             return
 
         new_size = temp_file.stat().st_size
