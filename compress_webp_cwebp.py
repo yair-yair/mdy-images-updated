@@ -19,12 +19,37 @@ MAX_FILES = int(sys.argv[2]) if len(sys.argv) > 2 else None
 
 QUALITY = 75        # איכות WebP
 METHOD = 6          # דחיסה חזקה ביותר
+PASSES = 10         # מספר מעברי ניתוח (rate-distortion) - חיסכון נוסף קטן, בלי פגיעה באיכות
 THREADS = True      # שימוש בכל המעבדים
+
+# תמונות גדולות מהמסגרת הזו יוקטנו (תוך שמירה על יחס הרוחב-גובה),
+# רק אם הן באמת גדולות ממנה - לעולם לא מגדילים תמונה קטנה יותר.
+# 1280x720 זו רזולוציית HD מלאה למסך/thumbnail רגיל, ולא יורגש הבדל בתצוגה רגילה.
+MAX_WIDTH = 1280
+MAX_HEIGHT = 720
 
 MAKE_BACKUP = False # לא ליצור גיבויים
 
-LOG_FILE = Path("compress_errors.log")
-PROGRESS_FILE = Path("compress_progress.log")  # קבצים שכבר טופלו (הצלחה/כשלון) - לא ניגע בהם שוב
+# קובצי מעקב נפרדים לריצה הזו (עם ההקטנה) - כדי לא לגעת בהיסטוריה
+# של הריצה הקודמת (compress_progress.log) וכדי שאפשר יהיה להריץ שוב בלי בעיה
+LOG_FILE = Path("compress_errors_resize.log")
+PROGRESS_FILE = Path("compress_progress_resize.log")  # קבצים שכבר טופלו (הצלחה/כשלון) - לא ניגע בהם שוב
+
+
+def get_dimensions(file):
+    result = subprocess.run(
+        ["webpinfo", str(file)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    width = height = None
+    for line in result.stdout.decode(errors="replace").splitlines():
+        line = line.strip()
+        if line.startswith("Width:"):
+            width = int(line.split(":")[1].strip())
+        elif line.startswith("Height:"):
+            height = int(line.split(":")[1].strip())
+    return width, height
 
 
 total_files = 0
@@ -76,6 +101,8 @@ def compress_image(file):
             str(QUALITY),
             "-m",
             str(METHOD),
+            "-pass",
+            str(PASSES),
             "-af",
             "-sharp_yuv",
             "-quiet",
@@ -83,6 +110,14 @@ def compress_image(file):
 
         if THREADS:
             command.append("-mt")
+
+        # הקטנה רק אם התמונה גדולה יותר מהמסגרת המותרת - לעולם לא מגדילים
+        width, height = get_dimensions(file)
+        if width and height and (width > MAX_WIDTH or height > MAX_HEIGHT):
+            scale = min(MAX_WIDTH / width, MAX_HEIGHT / height)
+            new_w = max(1, round(width * scale))
+            new_h = max(1, round(height * scale))
+            command += ["-resize", str(new_w), str(new_h)]
 
         command += [
             str(file),
@@ -185,6 +220,14 @@ for file in sorted(ROOT_FOLDER.rglob("*.webp")):
 
     if key in done_set:
         skipped_done += 1
+        continue
+
+    # אם התמונה כבר בגודל תקין - אין טעם לדחוס אותה שוב (דחיסה כפולה
+    # ללא צורך רק מוסיפה אובדן איכות בלי לחסוך כמעט כלום). מסמנים כטופל ומדלגים.
+    width, height = get_dimensions(file)
+    if width and height and width <= MAX_WIDTH and height <= MAX_HEIGHT:
+        skipped_done += 1
+        mark_done(key)
         continue
 
     if MAX_FILES is not None and processed_this_run >= MAX_FILES:
