@@ -1,0 +1,37 @@
+name: Release image archive
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '0 3 * * *'   # every day at 03:00 UTC, in case content changes without a push
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build zip of all image files (preserving folder structure)
+        run: |
+          zip -r images-latest.zip . \
+            -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' \
+            -x '.git/*' '.github/*'
+          echo "Zip contents (first 40 files):"
+          unzip -l images-latest.zip | head -n 40
+
+      - name: Publish / update "latest" release with the zip
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest image archive (auto-updated)"
+          body: "Automatically rebuilt zip of all image files in the repository. Updated on every push to main and once a day."
+          files: images-latest.zip
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
