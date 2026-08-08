@@ -13,25 +13,67 @@ permissions:
 jobs:
   package:
     runs-on: ubuntu-latest
+    env:
+      LANG: C.utf8
+      LC_ALL: C.utf8
+      ROOT: "מאגר תמונות mdy"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build zip of all image files (preserving folder structure)
+      - name: Build zip archives (full / per seder / per masechet)
         run: |
-          zip -r images-latest.zip . \
-            -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' \
-            -x '.git/*' '.github/*'
-          echo "Zip contents (first 40 files):"
-          unzip -l images-latest.zip | head -n 40
+          set -e
+          mkdir -p dist
+          IMG_PATTERNS='-iname *.jpg -o -iname *.jpeg -o -iname *.png -o -iname *.gif -o -iname *.webp -o -iname *.bmp -o -iname *.tiff'
 
-      - name: Publish / update "latest" release with the zip
+          echo "== Full archive =="
+          if [ -d "$ROOT" ]; then
+            zip -r "dist/images-latest.zip" "$ROOT" -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' > /dev/null
+          fi
+
+          echo "== Per-seder archives (only seders that contain images) =="
+          if [ -d "$ROOT" ]; then
+            find "$ROOT" -mindepth 1 -maxdepth 1 -type d | while read -r seder; do
+              seder_name=$(basename "$seder")
+              count=$(eval "find \"\$seder\" -type f \\( $IMG_PATTERNS \\)" | wc -l)
+              if [ "$count" -gt 0 ]; then
+                out="dist/seder-${seder_name}.zip"
+                (cd "$ROOT" && zip -r "../$out" "$seder_name" -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' > /dev/null)
+                echo "created $out ($count images)"
+              else
+                echo "skipping seder '$seder_name' - no images yet"
+              fi
+            done
+          fi
+
+          echo "== Per-masechet archives (only masechtot that directly contain images) =="
+          if [ -d "$ROOT" ]; then
+            find "$ROOT" -mindepth 2 -maxdepth 2 -type d | while read -r masechet; do
+              masechet_name=$(basename "$masechet")
+              count=$(eval "find \"\$masechet\" -maxdepth 1 -type f \\( $IMG_PATTERNS \\)" | wc -l)
+              if [ "$count" -gt 0 ]; then
+                out="dist/masechet-${masechet_name}.zip"
+                (cd "$masechet" && zip -r "../../../$out" . -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' > /dev/null)
+                echo "created $out ($count images)"
+              fi
+            done
+          fi
+
+          echo "== Result =="
+          ls -la dist
+
+      - name: Publish / update "latest" release with all archives
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: "Latest image archive (auto-updated)"
-          body: "Automatically rebuilt zip of all image files in the repository. Updated on every push to main and once a day."
-          files: images-latest.zip
+          name: "Latest image archives (auto-updated)"
+          body: |
+            קבצים אוטומטיים, מתעדכנים בכל push ל-main ופעם ביום:
+            - images-latest.zip: כל המאגר
+            - seder-<שם הסדר>.zip: קובץ לכל סדר שיש בו תמונות
+            - masechet-<שם המסכת>.zip: קובץ לכל מסכת שיש בה תמונות
+          files: dist/*.zip
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
