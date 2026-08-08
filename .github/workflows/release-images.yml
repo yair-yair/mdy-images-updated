@@ -19,14 +19,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install webp tools (cwebp, webpinfo)
+        run: sudo apt-get update -qq && sudo apt-get install -y webp
+
+      - name: Compress any not-yet-compressed images
+        run: |
+          python3 compress_webp_cwebp.py "$ROOT"
+
+      - name: Commit compressed images back to the repo (if anything changed)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$ROOT" compress_progress.log compress_progress_resize.log compress_errors.log compress_errors_resize.log 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: auto-compress images before building download archives [skip ci]"
+            git push
+            echo "committed compression changes"
+          else
+            echo "nothing to commit - all images already compressed"
+          fi
+
+      # Hebrew name -> ASCII slug, so uploaded release asset filenames survive
+      # GitHub's release-asset upload (which does not support non-ASCII names).
+      # The Hebrew names are preserved as the actual folder/file names *inside* each zip.
       - name: Build zip archives (full / per seder / per masechet)
         run: |
           set -e
           mkdir -p dist
 
-          # Hebrew name -> ASCII slug, so uploaded release asset filenames survive
-          # GitHub's release-asset upload (which does not support non-ASCII names).
-          # The Hebrew names are preserved as the actual folder/file names *inside* each zip.
           declare -A SLUG=(
             ["סדר זרעים"]="seder-1-zeraim"
             ["סדר מועד"]="seder-2-moed"
@@ -65,7 +85,6 @@ jobs:
             if [ -n "${SLUG[$name]}" ]; then
               echo "${SLUG[$name]}"
             else
-              # Fallback for a folder not in the known list: stable hash-based id
               echo "misc-$(echo -n "$name" | md5sum | cut -c1-8)"
             fi
           }
@@ -126,6 +145,7 @@ jobs:
         run: |
           {
             echo "קבצים אוטומטיים, מתעדכנים בכל push ל-main ופעם ביום."
+            echo "כל תמונה עוברת קודם דחיסת cwebp (איכות 75) לפני שהיא נכנסת לקבצי ההורדה."
             echo ""
             echo "- images-latest.zip: כל המאגר"
             echo ""
