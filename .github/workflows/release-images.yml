@@ -14,8 +14,6 @@ jobs:
   package:
     runs-on: ubuntu-latest
     env:
-      LANG: C.utf8
-      LC_ALL: C.utf8
       ROOT: "מאגר תמונות mdy"
     steps:
       - name: Checkout repository
@@ -25,37 +23,48 @@ jobs:
         run: |
           set -e
           mkdir -p dist
-          IMG_PATTERNS='-iname *.jpg -o -iname *.jpeg -o -iname *.png -o -iname *.gif -o -iname *.webp -o -iname *.bmp -o -iname *.tiff'
 
           echo "== Full archive =="
           if [ -d "$ROOT" ]; then
-            zip -r "dist/images-latest.zip" "$ROOT" -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' > /dev/null
+            zip -r -q "dist/images-latest.zip" "$ROOT" \
+              -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' \
+                 '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF'
           fi
 
           echo "== Per-seder archives (only seders that contain images) =="
           if [ -d "$ROOT" ]; then
-            find "$ROOT" -mindepth 1 -maxdepth 1 -type d | while read -r seder; do
-              seder_name=$(basename "$seder")
-              count=$(eval "find \"\$seder\" -type f \\( $IMG_PATTERNS \\)" | wc -l)
+            find "$ROOT" -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' seder; do
+              seder_name="${seder##*/}"
+              count=$(find "$seder" -type f \( \
+                -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o \
+                -iname '*.gif' -o -iname '*.webp' -o -iname '*.bmp' -o -iname '*.tiff' \
+              \) | wc -l)
+              echo "seder found: [$seder_name] images=$count"
               if [ "$count" -gt 0 ]; then
                 out="dist/seder-${seder_name}.zip"
-                (cd "$ROOT" && zip -r "../$out" "$seder_name" -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' > /dev/null)
-                echo "created $out ($count images)"
-              else
-                echo "skipping seder '$seder_name' - no images yet"
+                ( cd "$ROOT" && zip -r -q "../$out" "$seder_name" \
+                    -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' \
+                       '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' )
+                echo "created $out"
               fi
             done
           fi
 
           echo "== Per-masechet archives (only masechtot that directly contain images) =="
           if [ -d "$ROOT" ]; then
-            find "$ROOT" -mindepth 2 -maxdepth 2 -type d | while read -r masechet; do
-              masechet_name=$(basename "$masechet")
-              count=$(eval "find \"\$masechet\" -maxdepth 1 -type f \\( $IMG_PATTERNS \\)" | wc -l)
+            find "$ROOT" -mindepth 2 -maxdepth 2 -type d -print0 | while IFS= read -r -d '' masechet; do
+              masechet_name="${masechet##*/}"
+              count=$(find "$masechet" -maxdepth 1 -type f \( \
+                -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o \
+                -iname '*.gif' -o -iname '*.webp' -o -iname '*.bmp' -o -iname '*.tiff' \
+              \) | wc -l)
+              echo "masechet found: [$masechet_name] images=$count"
               if [ "$count" -gt 0 ]; then
                 out="dist/masechet-${masechet_name}.zip"
-                (cd "$masechet" && zip -r "../../../$out" . -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' > /dev/null)
-                echo "created $out ($count images)"
+                ( cd "$masechet" && zip -r -q "../../../$out" . \
+                    -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' \
+                       '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' )
+                echo "created $out"
               fi
             done
           fi
