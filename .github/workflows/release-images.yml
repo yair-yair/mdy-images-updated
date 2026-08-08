@@ -24,6 +24,52 @@ jobs:
           set -e
           mkdir -p dist
 
+          # Hebrew name -> ASCII slug, so uploaded release asset filenames survive
+          # GitHub's release-asset upload (which does not support non-ASCII names).
+          # The Hebrew names are preserved as the actual folder/file names *inside* each zip.
+          declare -A SLUG=(
+            ["סדר זרעים"]="seder-1-zeraim"
+            ["סדר מועד"]="seder-2-moed"
+            ["סדר נשים"]="seder-3-nashim"
+            ["סדר נזיקין"]="seder-4-nezikin"
+            ["סדר קדשים"]="seder-5-kodashim"
+            ["סדר טהרות"]="seder-6-taharot"
+
+            ["ברכות"]="berachot" ["פאה"]="peah" ["דמאי"]="demai" ["כלאים"]="kilayim"
+            ["שביעית"]="sheviit" ["תרומות"]="terumot" ["מעשרות"]="maasrot"
+            ["מעשר שני"]="maaser-sheni" ["חלה"]="challah" ["ערלה"]="orlah" ["ביכורים"]="bikkurim"
+
+            ["שבת"]="shabbat" ["עירובין"]="eruvin" ["פסחים"]="pesachim" ["שקלים"]="shekalim"
+            ["יומא"]="yoma" ["סוכה"]="sukkah" ["ביצה"]="beitzah" ["ראש השנה"]="rosh-hashanah"
+            ["תענית"]="taanit" ["מגילה"]="megillah" ["מועד קטן"]="moed-katan" ["חגיגה"]="chagigah"
+
+            ["יבמות"]="yevamot" ["כתובות"]="ketubot" ["נדרים"]="nedarim" ["נזיר"]="nazir"
+            ["סוטה"]="sotah" ["גיטין"]="gittin" ["קידושין"]="kiddushin"
+
+            ["בבא קמא"]="bava-kamma" ["בבא מציעא"]="bava-metzia" ["בבא בתרא"]="bava-batra"
+            ["סנהדרין"]="sanhedrin" ["מכות"]="makkot" ["שבועות"]="shevuot" ["עדיות"]="eduyot"
+            ["עבודה זרה"]="avodah-zarah" ["אבות"]="avot" ["הוריות"]="horayot"
+
+            ["זבחים"]="zevachim" ["מנחות"]="menachot" ["חולין"]="chullin" ["בכורות"]="bechorot"
+            ["ערכין"]="arachin" ["תמורה"]="temurah" ["כריתות"]="keritot" ["מעילה"]="meilah"
+            ["תמיד"]="tamid" ["מידות"]="middot" ["קינים"]="kinnim"
+
+            ["כלים"]="keilim" ["אהלות"]="oholot" ["נגעים"]="negaim" ["פרה"]="parah"
+            ["טהרות"]="taharot-masechet" ["מקואות"]="mikvaot" ["נדה"]="niddah"
+            ["מכשירין"]="machshirin" ["זבים"]="zavim" ["טבול יום"]="tevul-yom"
+            ["ידיים"]="yadayim" ["עוקצין"]="uktzin"
+          )
+
+          slug_for() {
+            local name="$1"
+            if [ -n "${SLUG[$name]}" ]; then
+              echo "${SLUG[$name]}"
+            else
+              # Fallback for a folder not in the known list: stable hash-based id
+              echo "misc-$(echo -n "$name" | md5sum | cut -c1-8)"
+            fi
+          }
+
           echo "== Full archive =="
           if [ -d "$ROOT" ]; then
             zip -r -q "dist/images-latest.zip" "$ROOT" \
@@ -32,6 +78,8 @@ jobs:
           fi
 
           echo "== Per-seder archives (only seders that contain images) =="
+          MAP_NOTES="dist/mapping.txt"
+          : > "$MAP_NOTES"
           if [ -d "$ROOT" ]; then
             find "$ROOT" -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' seder; do
               seder_name="${seder##*/}"
@@ -39,13 +87,13 @@ jobs:
                 -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o \
                 -iname '*.gif' -o -iname '*.webp' -o -iname '*.bmp' -o -iname '*.tiff' \
               \) | wc -l)
-              echo "seder found: [$seder_name] images=$count"
               if [ "$count" -gt 0 ]; then
-                out="dist/seder-${seder_name}.zip"
+                slug=$(slug_for "$seder_name")
+                out="dist/${slug}.zip"
                 ( cd "$ROOT" && zip -r -q "../$out" "$seder_name" \
                     -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' \
                        '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' )
-                echo "created $out"
+                echo "${slug}.zip = $seder_name ($count images)" >> "$MAP_NOTES"
               fi
             done
           fi
@@ -58,31 +106,43 @@ jobs:
                 -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o \
                 -iname '*.gif' -o -iname '*.webp' -o -iname '*.bmp' -o -iname '*.tiff' \
               \) | wc -l)
-              echo "masechet found: [$masechet_name] images=$count"
               if [ "$count" -gt 0 ]; then
-                out="dist/masechet-${masechet_name}.zip"
+                slug=$(slug_for "$masechet_name")
+                out="dist/masechet-${slug}.zip"
                 ( cd "$masechet" && zip -r -q "../../../$out" . \
                     -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' \
                        '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' )
-                echo "created $out"
+                echo "masechet-${slug}.zip = $masechet_name ($count images)" >> "$MAP_NOTES"
               fi
             done
           fi
 
           echo "== Result =="
           ls -la dist
+          echo "== Mapping =="
+          cat "$MAP_NOTES" || true
+
+      - name: Build release notes with the file-name mapping
+        run: |
+          {
+            echo "קבצים אוטומטיים, מתעדכנים בכל push ל-main ופעם ביום."
+            echo ""
+            echo "- images-latest.zip: כל המאגר"
+            echo ""
+            echo "מיפוי בין שם הקובץ באנגלית (שם התיקייה בפועל בעברית):"
+            echo '```'
+            cat dist/mapping.txt
+            echo '```'
+          } > release_body.md
 
       - name: Publish / update "latest" release with all archives
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: "Latest image archives (auto-updated)"
-          body: |
-            קבצים אוטומטיים, מתעדכנים בכל push ל-main ופעם ביום:
-            - images-latest.zip: כל המאגר
-            - seder-<שם הסדר>.zip: קובץ לכל סדר שיש בו תמונות
-            - masechet-<שם המסכת>.zip: קובץ לכל מסכת שיש בה תמונות
-          files: dist/*.zip
+          body_path: release_body.md
+          files: |
+            dist/*.zip
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
