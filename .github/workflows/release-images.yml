@@ -89,15 +89,17 @@ jobs:
             fi
           }
 
+          REPO_ROOT="$PWD"
+
           echo "== Full archive =="
           if [ -d "$ROOT" ]; then
-            zip -r -q "dist/images-latest.zip" "$ROOT" \
+            zip -r -q "$REPO_ROOT/dist/images-latest.zip" "$ROOT" \
               -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' \
                  '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF'
           fi
 
           echo "== Per-seder archives (only seders that contain images) =="
-          MAP_NOTES="dist/mapping.txt"
+          MAP_NOTES="$REPO_ROOT/dist/mapping.txt"
           : > "$MAP_NOTES"
           if [ -d "$ROOT" ]; then
             find "$ROOT" -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' seder; do
@@ -108,8 +110,10 @@ jobs:
               \) | wc -l)
               if [ "$count" -gt 0 ]; then
                 slug=$(slug_for "$seder_name")
-                out="dist/${slug}.zip"
-                ( cd "$ROOT" && zip -r -q "../$out" "$seder_name" \
+                out="$REPO_ROOT/dist/${slug}.zip"
+                # zip the Hebrew-named seder folder itself (not its bare contents),
+                # so the extracted top-level folder keeps its Hebrew name.
+                ( cd "$ROOT" && zip -r -q "$out" "$seder_name" \
                     -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' \
                        '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' )
                 echo "${slug}.zip = $seder_name ($count images)" >> "$MAP_NOTES"
@@ -121,14 +125,18 @@ jobs:
           if [ -d "$ROOT" ]; then
             find "$ROOT" -mindepth 2 -maxdepth 2 -type d -print0 | while IFS= read -r -d '' masechet; do
               masechet_name="${masechet##*/}"
+              masechet_parent="${masechet%/*}"
               count=$(find "$masechet" -maxdepth 1 -type f \( \
                 -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o \
                 -iname '*.gif' -o -iname '*.webp' -o -iname '*.bmp' -o -iname '*.tiff' \
               \) | wc -l)
               if [ "$count" -gt 0 ]; then
                 slug=$(slug_for "$masechet_name")
-                out="dist/masechet-${slug}.zip"
-                ( cd "$masechet" && zip -r -q "../../../$out" . \
+                out="$REPO_ROOT/dist/masechet-${slug}.zip"
+                # zip the Hebrew-named masechet folder itself from its parent
+                # (previously this cd'd INTO the masechet dir and zipped ".",
+                # which dropped the Hebrew folder name entirely on extraction).
+                ( cd "$masechet_parent" && zip -r -q "$out" "$masechet_name" \
                     -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' \
                        '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' )
                 echo "masechet-${slug}.zip = $masechet_name ($count images)" >> "$MAP_NOTES"
