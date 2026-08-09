@@ -91,15 +91,23 @@ jobs:
 
           REPO_ROOT="$PWD"
 
+          REPO_ROOT="$PWD"
+          STAGE="$REPO_ROOT/.zipstage"
+          rm -rf "$STAGE" && mkdir -p "$STAGE"
+
+          IMG_PATTERNS=( -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' \
+                            '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' )
+
           echo "== Full archive =="
+          # Every archive gets a top-level "images" folder as its root, matching
+          # the requested layout: images/<seder>/<masechet>/...
           if [ -d "$ROOT" ]; then
             out="$REPO_ROOT/dist/images-latest.zip"
-            # zip the CONTENTS of $ROOT (not $ROOT itself), so extracting gives
-            # the seder folders (סדר זרעים, סדר מועד, ...) directly at the top
-            # level, without a wrapping "מאגר תמונות mdy" folder.
-            ( cd "$ROOT" && zip -r -q "$out" . \
-                -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' \
-                   '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' )
+            rm -rf "$STAGE/full" && mkdir -p "$STAGE/full/images"
+            find "$REPO_ROOT/$ROOT" -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' seder; do
+              ln -s "$seder" "$STAGE/full/images/${seder##*/}"
+            done
+            ( cd "$STAGE/full" && zip -r -q "$out" images "${IMG_PATTERNS[@]}" )
           fi
 
           echo "== Per-seder archives (only seders that contain images) =="
@@ -115,11 +123,10 @@ jobs:
               if [ "$count" -gt 0 ]; then
                 slug=$(slug_for "$seder_name")
                 out="$REPO_ROOT/dist/${slug}.zip"
-                # zip the Hebrew-named seder folder itself (not its bare contents),
-                # so the extracted top-level folder keeps its Hebrew name.
-                ( cd "$ROOT" && zip -r -q "$out" "$seder_name" \
-                    -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' \
-                       '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' )
+                # layout inside zip: images/<seder_name>/...
+                rm -rf "$STAGE/seder" && mkdir -p "$STAGE/seder/images"
+                ln -s "$REPO_ROOT/$seder" "$STAGE/seder/images/$seder_name"
+                ( cd "$STAGE/seder" && zip -r -q "$out" images "${IMG_PATTERNS[@]}" )
                 echo "${slug}.zip = $seder_name ($count images)" >> "$MAP_NOTES"
               fi
             done
@@ -129,7 +136,7 @@ jobs:
           if [ -d "$ROOT" ]; then
             find "$ROOT" -mindepth 2 -maxdepth 2 -type d -print0 | while IFS= read -r -d '' masechet; do
               masechet_name="${masechet##*/}"
-              masechet_parent="${masechet%/*}"
+              seder_name="$(basename "$(dirname "$masechet")")"
               count=$(find "$masechet" -maxdepth 1 -type f \( \
                 -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o \
                 -iname '*.gif' -o -iname '*.webp' -o -iname '*.bmp' -o -iname '*.tiff' \
@@ -137,16 +144,16 @@ jobs:
               if [ "$count" -gt 0 ]; then
                 slug=$(slug_for "$masechet_name")
                 out="$REPO_ROOT/dist/masechet-${slug}.zip"
-                # zip the Hebrew-named masechet folder itself from its parent
-                # (previously this cd'd INTO the masechet dir and zipped ".",
-                # which dropped the Hebrew folder name entirely on extraction).
-                ( cd "$masechet_parent" && zip -r -q "$out" "$masechet_name" \
-                    -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' \
-                       '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' )
-                echo "masechet-${slug}.zip = $masechet_name ($count images)" >> "$MAP_NOTES"
+                # layout inside zip: images/<seder_name>/<masechet_name>/...
+                rm -rf "$STAGE/masechet" && mkdir -p "$STAGE/masechet/images/$seder_name"
+                ln -s "$REPO_ROOT/$masechet" "$STAGE/masechet/images/$seder_name/$masechet_name"
+                ( cd "$STAGE/masechet" && zip -r -q "$out" images "${IMG_PATTERNS[@]}" )
+                echo "masechet-${slug}.zip = $seder_name/$masechet_name ($count images)" >> "$MAP_NOTES"
               fi
             done
           fi
+
+          rm -rf "$STAGE"
 
           echo "== Result =="
           ls -la dist
