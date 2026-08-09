@@ -93,9 +93,13 @@ jobs:
 
           echo "== Full archive =="
           if [ -d "$ROOT" ]; then
-            zip -r -q "$REPO_ROOT/dist/images-latest.zip" "$ROOT" \
-              -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' \
-                 '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF'
+            out="$REPO_ROOT/dist/images-latest.zip"
+            # zip the CONTENTS of $ROOT (not $ROOT itself), so extracting gives
+            # the seder folders (סדר זרעים, סדר מועד, ...) directly at the top
+            # level, without a wrapping "מאגר תמונות mdy" folder.
+            ( cd "$ROOT" && zip -r -q "$out" . \
+                -i '*.jpg' '*.jpeg' '*.png' '*.gif' '*.webp' '*.bmp' '*.tiff' \
+                   '*.JPG' '*.JPEG' '*.PNG' '*.GIF' '*.WEBP' '*.BMP' '*.TIFF' )
           fi
 
           echo "== Per-seder archives (only seders that contain images) =="
