@@ -1,0 +1,101 @@
+name: Incremental compress & update zip
+
+# רץ אוטומטית בכל push שמוסיף/משנה תמונות בתיקיית "מאגר תמונות mdy"
+# מעדכן רק את התמונות שהשתנו (לא דוחס הכל מחדש) ומעדכן רק את קובצי ה-zip הרלוונטיים
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'מאגר תמונות mdy/**/*.webp'
+      - 'מאגר תמונות mdy/**/*.jpg'
+      - 'מאגר תמונות mdy/**/*.jpeg'
+      - 'מאגר תמונות mdy/**/*.png'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # נדרש כדי לפרסם/לעדכן Release
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # מספיק כדי להשוות מול ה-commit הקודם
+
+      - name: Install cwebp
+        run: sudo apt-get update -y && sudo apt-get install -y webp
+
+      - name: Find changed image files
+        id: changed
+        run: |
+          set -e
+          BASE="HEAD~1"
+          if ! git rev-parse "$BASE" >/dev/null 2>&1; then
+            BASE="$(git hash-object -t tree /dev/null)"
+          fi
+          git diff --name-only --diff-filter=ACM "$BASE" HEAD -- 'מאגר תמונות mdy' \
+            | grep -E '\.(webp|jpg|jpeg|png)$' > changed_files.txt || true
+          COUNT=$(wc -l < changed_files.txt | tr -d ' ')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Changed files: $COUNT"
+          cat changed_files.txt
+
+      - name: Compress only new/changed images (in place)
+        if: steps.changed.outputs.count != '0'
+        run: |
+          while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              *.webp)
+                cwebp -q 75 -m 6 "$f" -o "$f.tmp" && mv "$f.tmp" "$f"
+                ;;
+              *)
+                cwebp -q 75 -m 6 "$f" -o "${f%.*}.webp" && rm -f "$f"
+                ;;
+            esac
+          done < changed_files.txt
+
+      - name: Commit compressed images back to repo
+        if: steps.changed.outputs.count != '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A -- 'מאגר תמונות mdy'
+          git diff --cached --quiet || git commit -m "chore: compress newly added/changed images [skip ci]"
+          git push
+
+      - name: Build/update only the affected masechet zip(s)
+        if: steps.changed.outputs.count != '0'
+        run: |
+          mkdir -p release-assets
+          # לכל תמונה שהשתנתה - חלץ את שם המסכת (התיקייה השלישית בנתיב)
+          # ועדכן/צור zip רק עבורה, בלי לגעת בשאר קובצי ה-zip
+          awk -F'/' '{print $1"/"$2"/"$3}' changed_files.txt | sort -u | while read -r masechet_dir; do
+            [ -d "$masechet_dir" ] || continue
+            masechet_name=$(basename "$masechet_dir")
+            zip_path="release-assets/masechet-${masechet_name}.zip"
+            parent_dir=$(dirname "$masechet_dir")
+            # zip -u מוסיף/מעדכן רק את הערכים שהשתנו בתוך הארכיון הקיים
+            if [ -f "$zip_path" ]; then
+              (cd "$parent_dir" && zip -u -r "$OLDPWD/$zip_path" "$masechet_name")
+            else
+              # אין zip קיים עדיין ב-workspace - נוריד את הגרסה האחרונה מה-Release אם קיימת
+              curl -sL -o "$zip_path" \
+                "https://github.com/${{ github.repository }}/releases/download/latest/masechet-${masechet_name}.zip" || true
+              if [ -s "$zip_path" ] && unzip -l "$zip_path" >/dev/null 2>&1; then
+                (cd "$parent_dir" && zip -u -r "$OLDPWD/$zip_path" "$masechet_name")
+              else
+                (cd "$parent_dir" && zip -r "$OLDPWD/$zip_path" "$masechet_name")
+              fi
+            fi
+            echo "Updated $zip_path"
+          done
+
+      - name: Upload updated zip(s) to the "latest" release
+        if: steps.changed.outputs.count != '0'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          files: release-assets/*.zip
