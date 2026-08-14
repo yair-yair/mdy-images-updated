@@ -27,6 +27,12 @@ jobs:
       - name: Install cwebp
         run: sudo apt-get update -y && sudo apt-get install -y webp
 
+      - name: Configure git for Hebrew filenames
+        run: git config core.quotePath false
+        # קריטי: בלי זה, git עוטף שמות קבצים עם תווים לא-ASCII (עברית) במרכאות
+        # ו-escape אוקטלי כשמוציא אותם ל-pipe, מה שגרם ל-grep על הסיומת (.webp)
+        # להיכשל בשקט ולזהות 0 קבצים שהשתנו - למרות שבפועל השתנו.
+
       - name: Find changed image files
         id: changed
         run: |
