@@ -1,11 +1,9 @@
 name: Release image archive
 
 on:
-  # הוסר טריגר push - העדכון על כל push מטופל עכשיו ב-incremental-release.yml
-  # (מעדכן רק את מה שהשתנה, בלי לבנות הכל מחדש). ה-workflow הזה נשאר כרשת
-  # ביטחון: בנייה מלאה מחדש פעם ביום, למקרה שמשהו יתפספס באינקרמנטלי.
-  schedule:
-    - cron: '0 3 * * *'   # every day at 03:00 UTC - full rebuild safety net
+  # בוטל הריצה היומית האוטומטית - העדכון בפועל מטופל תמיד ע"י incremental-release.yml
+  # (רץ מיד כשנוספת תמונה, מעדכן רק את מה שהשתנה). ה-workflow הזה נשאר
+  # זמין להרצה ידנית בלבד, למקרה שיהיה צורך בבנייה מלאה מחדש.
   workflow_dispatch: {}
 
 permissions:
