@@ -25,11 +25,11 @@ def is_valid_zip(path):
 
 def update_zip_with(zip_path, img_relpath):
     if is_valid_zip(zip_path):
-        subprocess.run(["zip", "-q", "-u", "-r", zip_path, img_relpath], check=True)
+        subprocess.run(["zip", "-q", "-D", "-u", "-r", zip_path, img_relpath], check=True)
     else:
         if os.path.exists(zip_path):
             os.remove(zip_path)
-        subprocess.run(["zip", "-q", "-r", zip_path, img_relpath], check=True)
+        subprocess.run(["zip", "-q", "-D", "-r", zip_path, img_relpath], check=True)
 
 
 main_zip = "release-assets/images-latest.zip"
