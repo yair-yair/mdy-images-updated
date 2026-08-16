@@ -1,6 +1,10 @@
 import os
 import subprocess
 
+from slugs import slug_for
+
+os.makedirs("release-assets", exist_ok=True)
+
 groups = {}  # masechet_name -> "seder/masechet"
 with open("changed_files.txt", encoding="utf-8") as fh:
     for line in fh:
@@ -19,26 +23,37 @@ def is_valid_zip(path):
     return r.returncode == 0
 
 
+def update_zip_with(zip_path, img_relpath):
+    if is_valid_zip(zip_path):
+        subprocess.run(["zip", "-q", "-u", "-r", zip_path, img_relpath], check=True)
+    else:
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
+        subprocess.run(["zip", "-q", "-r", zip_path, img_relpath], check=True)
+
+
+main_zip = "release-assets/images-latest.zip"
+
 for masechet_name, seder_masechet in groups.items():
+    # img_path = images/<seder>/<masechet> - used as the target for ALL THREE
+    # zips (masechet, seder, main), so only the actually-changed files get
+    # touched even inside the bigger seder/main archives.
     img_path = os.path.join("images", seder_masechet)
     if not os.path.isdir(img_path):
         print(f"SKIP (not a dir): {img_path}")
         continue
 
-    masechet_zip = f"release-assets/masechet-{masechet_name}.zip"
-    if is_valid_zip(masechet_zip):
-        subprocess.run(["zip", "-q", "-u", "-r", masechet_zip, img_path], check=True)
-    else:
-        if os.path.exists(masechet_zip):
-            os.remove(masechet_zip)
-        subprocess.run(["zip", "-q", "-r", masechet_zip, img_path], check=True)
-    print(f"Updated {masechet_zip}")
+    seder_name = seder_masechet.split("/", 1)[0]
 
-    main_zip = "release-assets/images-latest.zip"
-    if is_valid_zip(main_zip):
-        subprocess.run(["zip", "-q", "-u", "-r", main_zip, img_path], check=True)
-    else:
-        if os.path.exists(main_zip):
-            os.remove(main_zip)
-        subprocess.run(["zip", "-q", "-r", main_zip, img_path], check=True)
+    masechet_slug = slug_for(masechet_name)
+    masechet_zip = f"release-assets/masechet-{masechet_slug}.zip"
+    update_zip_with(masechet_zip, img_path)
+    print(f"Updated {masechet_zip} (מסכת {masechet_name})")
+
+    seder_slug = slug_for(seder_name)
+    seder_zip = f"release-assets/{seder_slug}.zip"
+    update_zip_with(seder_zip, img_path)
+    print(f"Updated {seder_zip} (סדר {seder_name})")
+
+    update_zip_with(main_zip, img_path)
     print(f"Updated {main_zip} (מסכת {masechet_name})")
