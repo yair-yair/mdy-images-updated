@@ -1,5 +1,6 @@
 import os
 import subprocess
+import zipfile
 
 from slugs import slug_for
 
@@ -23,6 +24,25 @@ def is_valid_zip(path):
     return r.returncode == 0
 
 
+def strip_directory_entries(zip_path):
+    """Remove any directory-only entries (e.g. 'images/seder/masechet/') that
+    zip -u can leave behind from an older, already-dirty downloaded archive.
+    -D only stops *new* entries from being added; it does not clean ones
+    that were already present in the file we downloaded."""
+    tmp_path = zip_path + ".clean.tmp"
+    with zipfile.ZipFile(zip_path, "r") as src, \
+         zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as dst:
+        removed = 0
+        for item in src.infolist():
+            if item.filename.endswith("/"):
+                removed += 1
+                continue
+            dst.writestr(item, src.read(item.filename))
+    os.replace(tmp_path, zip_path)
+    if removed:
+        print(f"  stripped {removed} directory entrie(s) from {zip_path}")
+
+
 def update_zip_with(zip_path, img_relpath):
     if is_valid_zip(zip_path):
         subprocess.run(["zip", "-q", "-D", "-u", "-r", zip_path, img_relpath], check=True)
@@ -30,6 +50,7 @@ def update_zip_with(zip_path, img_relpath):
         if os.path.exists(zip_path):
             os.remove(zip_path)
         subprocess.run(["zip", "-q", "-D", "-r", zip_path, img_relpath], check=True)
+    strip_directory_entries(zip_path)
 
 
 main_zip = "release-assets/images-latest.zip"
