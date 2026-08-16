@@ -84,36 +84,70 @@ jobs:
           mkdir -p release-assets
           curl -sL -o release-assets/images-latest.zip \
             "https://github.com/${{ github.repository }}/releases/download/latest/images-latest.zip" || true
-          awk -F'/' '{print $3}' changed_files.txt | sort -u | while read -r masechet_name; do
-            curl -sL -o "release-assets/masechet-${masechet_name}.zip" \
-              "https://github.com/${{ github.repository }}/releases/download/latest/masechet-${masechet_name}.zip" || true
-          done
+          python3 - <<'PYEOF'
+          import subprocess
+          masechtot = set()
+          with open("changed_files.txt", encoding="utf-8") as fh:
+              for line in fh:
+                  parts = line.strip().split("/")
+                  if len(parts) >= 3 and parts[2]:
+                      masechtot.add(parts[2])
+          for m in sorted(masechtot):
+              url = f"https://github.com/{__import__('os').environ['GH_REPO']}/releases/download/latest/masechet-{m}.zip"
+              subprocess.run(["curl", "-sL", "-o", f"release-assets/masechet-{m}.zip", url])
+          PYEOF
+        env:
+          GH_REPO: ${{ github.repository }}
 
       - name: Update only the affected masechet zip(s) AND the main combined zip
         if: steps.changed.outputs.count != '0'
         run: |
-          # לכל תמונה שהשתנתה - חלץ סדר/מסכת, ועדכן רק את קובץ המסכת שלה +
-          # את הקובץ הראשי הכולל, בלי לגעת בקבצי zip של מסכתות אחרות
-          awk -F'/' '{print $2"/"$3}' changed_files.txt | sort -u | while read -r seder_masechet; do
-            masechet_name=$(basename "$seder_masechet")
-            [ -d "images/${seder_masechet}" ] || continue
+          python3 - <<'PYEOF'
+          import os, subprocess
 
-            masechet_zip="release-assets/masechet-${masechet_name}.zip"
-            if [ -s "$masechet_zip" ] && unzip -l "$masechet_zip" >/dev/null 2>&1; then
-              zip -u -r "$masechet_zip" "images/${seder_masechet}"
-            else
-              rm -f "$masechet_zip"
-              zip -r "$masechet_zip" "images/${seder_masechet}"
-            fi
-            echo "Updated $masechet_zip"
+          groups = {}  # masechet_name -> seder/masechet relative path
+          with open("changed_files.txt", encoding="utf-8") as fh:
+              for line in fh:
+                  parts = line.strip().split("/")
+                  # parts[0]="מאגר תמונות mdy", parts[1]=seder, parts[2]=masechet
+                  if len(parts) >= 3 and parts[1] and parts[2]:
+                      groups[parts[2]] = f"{parts[1]}/{parts[2]}"
 
-            if [ -s release-assets/images-latest.zip ] && unzip -l release-assets/images-latest.zip >/dev/null 2>&1; then
-              zip -u -r release-assets/images-latest.zip "images/${seder_masechet}"
-            else
-              zip -r release-assets/images-latest.zip "images/${seder_masechet}"
-            fi
-            echo "Updated release-assets/images-latest.zip (מסכת ${masechet_name})"
-          done
+          print("Masechtot to update:", list(groups.keys()))
+
+          for masechet_name, seder_masechet in groups.items():
+              img_path = os.path.join("images", seder_masechet)
+              if not os.path.isdir(img_path):
+                  print(f"SKIP (not a dir): {img_path}")
+                  continue
+
+              masechet_zip = f"release-assets/masechet-{masechet_name}.zip"
+              has_existing = os.path.isfile(masechet_zip) and os.path.getsize(masechet_zip) > 0
+              if has_existing:
+                  # verify it's a real zip
+                  r = subprocess.run(["unzip", "-l", masechet_zip], capture_output=True)
+                  has_existing = r.returncode == 0
+              if not has_existing:
+                  if os.path.exists(masechet_zip):
+                      os.remove(masechet_zip)
+                  subprocess.run(["zip", "-q", "-r", masechet_zip, img_path], check=True)
+              else:
+                  subprocess.run(["zip", "-q", "-u", "-r", masechet_zip, img_path], check=True)
+              print(f"Updated {masechet_zip}")
+
+              main_zip = "release-assets/images-latest.zip"
+              has_main = os.path.isfile(main_zip) and os.path.getsize(main_zip) > 0
+              if has_main:
+                  r = subprocess.run(["unzip", "-l", main_zip], capture_output=True)
+                  has_main = r.returncode == 0
+              if not has_main:
+                  if os.path.exists(main_zip):
+                      os.remove(main_zip)
+                  subprocess.run(["zip", "-q", "-r", main_zip, img_path], check=True)
+              else:
+                  subprocess.run(["zip", "-q", "-u", "-r", main_zip, img_path], check=True)
+              print(f"Updated {main_zip} (מסכת {masechet_name})")
+          PYEOF
 
       - name: Upload updated zip(s) to the "latest" release
         if: steps.changed.outputs.count != '0'
