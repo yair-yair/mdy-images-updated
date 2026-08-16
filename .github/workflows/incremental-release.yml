@@ -80,74 +80,13 @@ jobs:
 
       - name: Download existing zips to update incrementally
         if: steps.changed.outputs.count != '0'
-        run: |
-          mkdir -p release-assets
-          curl -sL -o release-assets/images-latest.zip \
-            "https://github.com/${{ github.repository }}/releases/download/latest/images-latest.zip" || true
-          python3 - <<'PYEOF'
-          import subprocess
-          masechtot = set()
-          with open("changed_files.txt", encoding="utf-8") as fh:
-              for line in fh:
-                  parts = line.strip().split("/")
-                  if len(parts) >= 3 and parts[2]:
-                      masechtot.add(parts[2])
-          for m in sorted(masechtot):
-              url = f"https://github.com/{__import__('os').environ['GH_REPO']}/releases/download/latest/masechet-{m}.zip"
-              subprocess.run(["curl", "-sL", "-o", f"release-assets/masechet-{m}.zip", url])
-          PYEOF
         env:
           GH_REPO: ${{ github.repository }}
+        run: python3 .github/scripts/download_existing_zips.py
 
       - name: Update only the affected masechet zip(s) AND the main combined zip
         if: steps.changed.outputs.count != '0'
-        run: |
-          python3 - <<'PYEOF'
-          import os, subprocess
-
-          groups = {}  # masechet_name -> seder/masechet relative path
-          with open("changed_files.txt", encoding="utf-8") as fh:
-              for line in fh:
-                  parts = line.strip().split("/")
-                  # parts[0]="מאגר תמונות mdy", parts[1]=seder, parts[2]=masechet
-                  if len(parts) >= 3 and parts[1] and parts[2]:
-                      groups[parts[2]] = f"{parts[1]}/{parts[2]}"
-
-          print("Masechtot to update:", list(groups.keys()))
-
-          for masechet_name, seder_masechet in groups.items():
-              img_path = os.path.join("images", seder_masechet)
-              if not os.path.isdir(img_path):
-                  print(f"SKIP (not a dir): {img_path}")
-                  continue
-
-              masechet_zip = f"release-assets/masechet-{masechet_name}.zip"
-              has_existing = os.path.isfile(masechet_zip) and os.path.getsize(masechet_zip) > 0
-              if has_existing:
-                  # verify it's a real zip
-                  r = subprocess.run(["unzip", "-l", masechet_zip], capture_output=True)
-                  has_existing = r.returncode == 0
-              if not has_existing:
-                  if os.path.exists(masechet_zip):
-                      os.remove(masechet_zip)
-                  subprocess.run(["zip", "-q", "-r", masechet_zip, img_path], check=True)
-              else:
-                  subprocess.run(["zip", "-q", "-u", "-r", masechet_zip, img_path], check=True)
-              print(f"Updated {masechet_zip}")
-
-              main_zip = "release-assets/images-latest.zip"
-              has_main = os.path.isfile(main_zip) and os.path.getsize(main_zip) > 0
-              if has_main:
-                  r = subprocess.run(["unzip", "-l", main_zip], capture_output=True)
-                  has_main = r.returncode == 0
-              if not has_main:
-                  if os.path.exists(main_zip):
-                      os.remove(main_zip)
-                  subprocess.run(["zip", "-q", "-r", main_zip, img_path], check=True)
-              else:
-                  subprocess.run(["zip", "-q", "-u", "-r", main_zip, img_path], check=True)
-              print(f"Updated {main_zip} (מסכת {masechet_name})")
-          PYEOF
+        run: python3 .github/scripts/update_zips.py
 
       - name: Upload updated zip(s) to the "latest" release
         if: steps.changed.outputs.count != '0'
