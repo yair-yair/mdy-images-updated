@@ -91,9 +91,14 @@ jobs:
         if: steps.changed.outputs.count != '0'
         run: python3 .github/scripts/update_zips.py
 
+      - name: Rebuild release notes with fresh, accurate file counts
+        if: steps.changed.outputs.count != '0'
+        run: python3 .github/scripts/rebuild_release_notes.py
+
       - name: Upload updated zip(s) to the "latest" release
         if: steps.changed.outputs.count != '0'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
+          body_path: release_body.md
           files: release-assets/*.zip
