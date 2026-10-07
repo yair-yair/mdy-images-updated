@@ -1,0 +1,91 @@
+name: Refresh zips after admin change
+
+# רץ אוטומטית אחרי קומיט של כלי המחיקה (הודעת הקומיט מתחילה ב-"admin:"),
+# או ידנית. מעדכן רק את ה-zip של המסכת שהושפעה, של הסדר שלה, ואת הראשי.
+# מסכתות אחרות לא נבנות מחדש.
+#
+# הרצה ידנית: Actions -> Refresh zips after admin change -> Run workflow
+#   folders: למשל "סדר קדשים/מנחות" (כמה - מופרדים בפסיק). ריק = לפי הקומיט האחרון.
+#   dry_run: true = רק דוח השוואה בין ה-zip לריפו, בלי להעלות כלום.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'מאגר תמונות mdy/**'
+  workflow_dispatch:
+    inputs:
+      folders:
+        description: 'סדר/מסכת, מופרדים בפסיק (ריק = לפי הקומיט האחרון)'
+        required: false
+        default: ''
+      dry_run:
+        description: 'בדיקה בלבד בלי להעלות (true/false)'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+
+# עדכוני zip לא רצים במקביל (כדי שלא ידרסו זה את זה)
+concurrency:
+  group: release-zips
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'admin:')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Find affected folders
+        id: find
+        env:
+          INPUT_FOLDERS: ${{ github.event.inputs.folders }}
+        run: |
+          set -e
+          git config core.quotePath false
+          : > changed_files.txt
+          if [ -n "$INPUT_FOLDERS" ]; then
+            IFS=',' read -ra ITEMS <<< "$INPUT_FOLDERS"
+            for item in "${ITEMS[@]}"; do
+              item="$(echo "$item" | sed 's/^ *//;s/ *$//')"
+              if [ -n "$item" ]; then echo "מאגר תמונות mdy/$item/_" >> changed_files.txt; fi
+            done
+          else
+            # --no-renames: גם שם ישן (נמחק) וגם שם חדש (נוסף) נספרים כשינוי
+            git diff --name-only --no-renames HEAD~1 HEAD -- 'מאגר תמונות mdy' \
+              | grep -E '\.(webp|jpg|jpeg|png|gif|bmp|tiff)$' > changed_files.txt || true
+          fi
+          COUNT=$(wc -l < changed_files.txt | tr -d ' ')
+          echo "Changed entries: $COUNT"
+          cat changed_files.txt | head -50
+          if [ "$COUNT" = "0" ]; then echo "has=false" >> "$GITHUB_OUTPUT"; else echo "has=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Download existing zips (only affected masechet / seder / main)
+        if: steps.find.outputs.has == 'true'
+        env:
+          GH_REPO: ${{ github.repository }}
+        run: python3 .github/scripts/download_existing_zips.py
+
+      - name: Refresh zips from current repo state
+        if: steps.find.outputs.has == 'true'
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
+        run: python3 .github/scripts/refresh_zips.py
+
+      - name: Rebuild release notes with fresh file counts
+        if: steps.find.outputs.has == 'true' && github.event.inputs.dry_run != 'true'
+        run: python3 .github/scripts/rebuild_release_notes.py
+
+      - name: Upload refreshed zip(s) to the "latest" release
+        if: steps.find.outputs.has == 'true' && github.event.inputs.dry_run != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          body_path: release_body.md
+          files: release-assets/*.zip
