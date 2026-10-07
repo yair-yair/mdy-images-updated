@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       folders:
-        description: 'סדר/מסכת, מופרדים בפסיק (ריק = לפי הקומיט האחרון)'
+        description: 'מסכת (סדר/מסכת), סדר שלם (שם הסדר), או ALL לכל המאגר. מופרדים בפסיק. ריק = לפי הקומיט האחרון'
         required: false
         default: ''
       dry_run:
@@ -54,7 +54,20 @@ jobs:
             IFS=',' read -ra ITEMS <<< "$INPUT_FOLDERS"
             for item in "${ITEMS[@]}"; do
               item="$(echo "$item" | sed 's/^ *//;s/ *$//')"
-              if [ -n "$item" ]; then echo "מאגר תמונות mdy/$item/_" >> changed_files.txt; fi
+              [ -z "$item" ] && continue
+              if [ "$item" = "ALL" ]; then
+                # כל המאגר: כל המסכתות שקיימות
+                for m in "מאגר תמונות mdy"/*/*/; do
+                  [ -d "$m" ] && echo "${m%/}/_" >> changed_files.txt
+                done
+              elif [[ "$item" != */* ]]; then
+                # סדר שלם: כל המסכתות שלו
+                for m in "מאגר תמונות mdy/$item"/*/; do
+                  [ -d "$m" ] && echo "${m%/}/_" >> changed_files.txt
+                done
+              else
+                echo "מאגר תמונות mdy/$item/_" >> changed_files.txt
+              fi
             done
           else
             # --no-renames: גם שם ישן (נמחק) וגם שם חדש (נוסף) נספרים כשינוי
