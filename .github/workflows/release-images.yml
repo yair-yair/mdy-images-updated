@@ -163,11 +163,10 @@ jobs:
         run: |
           {
             TOTAL=$(find "$ROOT" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.bmp' -o -iname '*.tiff' \) | wc -l)
-            echo "[images-latest.zip](https://github.com/${{ github.repository }}/releases/download/latest/images-latest.zip) - כל המאגר: ${TOTAL} תמונות"
-            echo ""
             echo "קבצים אוטומטיים, מתעדכנים בכל תמונה שנוספת או נמחקת."
             echo "כל תמונה עוברת קודם דחיסת cwebp (איכות 75) לפני שהיא נכנסת לקבצי ההורדה."
             echo ""
+            echo "- [images-latest.zip](https://github.com/${{ github.repository }}/releases/download/latest/images-latest.zip): כל המאגר (${TOTAL} images)"
             echo "מיפוי בין שם הקובץ באנגלית (שם התיקייה בפועל בעברית):"
             echo '```'
             cat dist/mapping.txt
