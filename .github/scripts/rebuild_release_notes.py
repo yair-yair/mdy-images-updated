@@ -46,9 +46,9 @@ repo = os.environ.get("GITHUB_REPOSITORY", "yair-yair/mdy-images-updated")
 main_zip_url = f"https://github.com/{repo}/releases/download/latest/images-latest.zip"
 
 body = (
-    f"[images-latest.zip]({main_zip_url}) - כל המאגר: {total:,} תמונות\n\n"
     "קבצים אוטומטיים, מתעדכנים אוטומטית בכל תמונה שנוספת או נמחקת.\n"
     "כל תמונה עוברת קודם דחיסת cwebp (איכות 75) לפני שהיא נכנסת לקבצי ההורדה.\n\n"
+    f"- [images-latest.zip]({main_zip_url}): כל המאגר ({total} images)\n\n"
     "מיפוי בין שם הקובץ באנגלית (שם התיקייה בפועל בעברית):\n"
     "```\n" + "\n".join(lines) + "\n```\n"
 )
