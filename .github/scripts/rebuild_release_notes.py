@@ -41,14 +41,18 @@ os.makedirs("dist", exist_ok=True)
 with open("dist/mapping.txt", "w", encoding="utf-8") as fh:
     fh.write("\n".join(lines) + "\n")
 
+total = count_images(ROOT) if os.path.isdir(ROOT) else 0
+repo = os.environ.get("GITHUB_REPOSITORY", "yair-yair/mdy-images-updated")
+main_zip_url = f"https://github.com/{repo}/releases/download/latest/images-latest.zip"
+
 body = (
-    "קבצים אוטומטיים, מתעדכנים אוטומטית ומיידית בכל תמונה חדשה שנוספת.\n"
+    f"[images-latest.zip]({main_zip_url}) - כל המאגר: {total:,} תמונות\n\n"
+    "קבצים אוטומטיים, מתעדכנים אוטומטית בכל תמונה שנוספת או נמחקת.\n"
     "כל תמונה עוברת קודם דחיסת cwebp (איכות 75) לפני שהיא נכנסת לקבצי ההורדה.\n\n"
-    "- images-latest.zip: כל המאגר\n\n"
     "מיפוי בין שם הקובץ באנגלית (שם התיקייה בפועל בעברית):\n"
     "```\n" + "\n".join(lines) + "\n```\n"
 )
 with open("release_body.md", "w", encoding="utf-8") as fh:
     fh.write(body)
 
-print(f"Rebuilt release notes with {len(lines)} entries")
+print(f"Rebuilt release notes with {len(lines)} entries, total {total} images")
