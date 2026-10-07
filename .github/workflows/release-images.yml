@@ -170,6 +170,7 @@ jobs:
             echo ""
             echo "מיפוי בין שם הקובץ באנגלית (שם התיקייה בפועל בעברית):"
             echo '```'
+            echo "images-latest.zip = כל המאגר (${TOTAL} images)"
             cat dist/mapping.txt
             echo '```'
           } > release_body.md
