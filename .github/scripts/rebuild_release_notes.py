@@ -37,11 +37,14 @@ if os.path.isdir(ROOT):
                     f"masechet-{slug}.zip = {seder_name}/{masechet_name} ({masechet_count} images)"
                 )
 
+total = count_images(ROOT) if os.path.isdir(ROOT) else 0
+# השורה הראשונה במיפוי: כל המאגר
+lines.insert(0, f"images-latest.zip = כל המאגר ({total} images)")
+
 os.makedirs("dist", exist_ok=True)
 with open("dist/mapping.txt", "w", encoding="utf-8") as fh:
     fh.write("\n".join(lines) + "\n")
 
-total = count_images(ROOT) if os.path.isdir(ROOT) else 0
 repo = os.environ.get("GITHUB_REPOSITORY", "yair-yair/mdy-images-updated")
 main_zip_url = f"https://github.com/{repo}/releases/download/latest/images-latest.zip"
 
@@ -55,4 +58,4 @@ body = (
 with open("release_body.md", "w", encoding="utf-8") as fh:
     fh.write(body)
 
-print(f"Rebuilt release notes with {len(lines)} entries, total {total} images")
+print(f"Rebuilt release notes with {len(lines)} entries (incl. full repo), total {total} images")
