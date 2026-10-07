@@ -36,6 +36,9 @@ if not affected:
 print("מסכתות מושפעות:", {s: sorted(m) for s, m in affected.items()})
 
 
+REPORT = []
+
+
 def emit_notice(msg):
     if os.environ.get("GITHUB_ACTIONS") == "true":
         esc = msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
@@ -88,7 +91,7 @@ def rebuild(zip_path, folders, allow_create):
         note += "\n   יוסר: " + n
     for n in missing[:5]:
         note += "\n   יתווסף: " + n
-    emit_notice(note)
+    REPORT.append(note)
 
     if DRY:
         return
@@ -128,4 +131,5 @@ for seder, ms in affected.items():
     for m in sorted(ms):
         rebuild(f"{OUT}/masechet-{slug_for(m)}.zip", [(seder, m)], allow_create=True)
 
+emit_notice("\n".join(REPORT))
 print("סיום" + (" (בדיקה בלבד)" if DRY else ""))
