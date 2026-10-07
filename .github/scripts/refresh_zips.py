@@ -36,6 +36,12 @@ if not affected:
 print("מסכתות מושפעות:", {s: sorted(m) for s, m in affected.items()})
 
 
+def emit_notice(msg):
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        esc = msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print(f"::notice title=zip-report::{esc}")
+
+
 def disk_files(seder, masechet):
     base = os.path.join(ROOT, seder, masechet)
     res = {}
@@ -75,6 +81,14 @@ def rebuild(zip_path, folders, allow_create):
         print("   יוסר:", n)
     for n in missing[:5]:
         print("   יתווסף:", n)
+    # דוח גם כהערה (annotation) של ההרצה, כדי שכלי המחיקה יוכל לקרוא אותו
+    note = (f"{os.path.basename(zip_path)}: ב-zip {len(old_names)} | בריפו {len(wanted)} | "
+            f"יוסרו {len(extra)} | יתווספו {len(missing)}")
+    for n in extra[:5]:
+        note += "\n   יוסר: " + n
+    for n in missing[:5]:
+        note += "\n   יתווסף: " + n
+    emit_notice(note)
 
     if DRY:
         return
